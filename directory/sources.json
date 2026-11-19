@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "platform-architecture",
+      "title": "Platform architecture and ownership boundaries",
+      "use_when": "Identify component responsibilities and trace a cross-application flow.",
+      "location": null,
+      "scope": "Unconfigured; service, environment, and version applicability must be supplied.",
+      "status": "missing",
+      "owner": null,
+      "last_verified": null,
+      "access": "Not configured. Ask the platform owner for the canonical source and approved access method."
+    },
+    {
+      "id": "frontend-integration",
+      "title": "Frontend integration contracts",
+      "use_when": "Establish routing, navigation, shared SDK, identity context, and permission-display contracts.",
+      "location": null,
+      "scope": "Unconfigured; service, environment, and version applicability must be supplied.",
+      "status": "missing",
+      "owner": null,
+      "last_verified": null,
+      "access": "Not configured. Ask the frontend platform owner."
+    },
+    {
+      "id": "observability",
+      "title": "Observability entry points and query guidance",
+      "use_when": "Locate authorized dashboards, logs, traces, and service health criteria.",
+      "location": null,
+      "scope": "Unconfigured; service, environment, and version applicability must be supplied.",
+      "status": "missing",
+      "owner": null,
+      "last_verified": null,
+      "access": "Not configured. Supply approved tooling and access prerequisites without credentials."
+    },
+    {
+      "id": "deployment",
+      "title": "Service deployment and recovery procedure",
+      "use_when": "Prepare or execute a deployment and establish verification and recovery requirements.",
+      "location": null,
+      "scope": "Unconfigured; create per-service/environment entries where procedures differ.",
+      "status": "missing",
+      "owner": null,
+      "last_verified": null,
+      "access": "Not configured. Missing procedure blocks execution."
+    },
+    {
+      "id": "change-authorization",
+      "title": "Change authorization and escalation policy",
+      "use_when": "Determine who may approve an operational action and what scope an approval covers.",
+      "location": null,
+      "scope": "Unconfigured; service and environment applicability must be supplied.",
+      "status": "missing",
+      "owner": null,
+      "last_verified": null,
+      "access": "Not configured. Missing applicable authorization policy blocks execution."
+    }
+  ]
+}
