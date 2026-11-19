@@ -1,0 +1,18 @@
+{
+  "workspace": "REPLACE_WITH_PARENT_DIRECTORY_OF_YOUR_GIT_CHECKOUTS",
+  "app_interface_directory": "app-interface",
+  "state_directory": "~/.pi/agent/release-pending-audit/runs",
+  "jira_scope": "Always ask at run start, in one combined question: which Jira user's tickets to audit, the board name, the sprint (offer the board's active sprint as a choice), and which board column(s)/statuses to include (e.g. Release Pending, In Progress). Never fall back to remembered or configured values.",
+  "release_comment": "The work has been released to production.",
+  "ask_for_missing_repo_links_before_analysis": true,
+  "merge_equals_release_repositories": [
+    "github.com/redhatinsights/valpop",
+    "github.com/redhatinsights/insights-frontend-builder-common",
+    "github.com/redhatinsights/frontend-assets",
+    "github.com/redhatinsights/frontend-asset-proxy",
+    "github.com/redhatinsights/konflux-pipelines",
+    "github.com/redhatinsights/frontend-development-proxy",
+    "github.com/redhatinsights/frontend-experience-docs"
+  ],
+  "merge_equals_release_when_undeployed": "For repositories with no app-interface deployment that are npm package repos or nx monorepos, a PR merged to the default branch is equivalent to a production release."
+}
