@@ -16,6 +16,7 @@ Missing information is explicit; no platform topology or deployment commands are
 | Use this from Pi or another harness | [Agent integration](docs/agent-integration.md) |
 | Route an engineering task | [Skill catalog](catalog.json) |
 | Audit whether sprint tickets are released to production | [Release pending audit](skills/release-pending-audit/SKILL.md) |
+| Prepare a production deployment MR with Quay image checks | [App-interface production deploy](skills/app-interface-prod-deploy/SKILL.md) |
 | Find services, owners, docs, and tools | [Directory guide](directory/README.md) |
 | Populate and maintain this repository | [Contributing](CONTRIBUTING.md) |
 

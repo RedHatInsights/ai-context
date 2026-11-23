@@ -12,6 +12,15 @@
       "owner": null,
       "last_verified": null,
       "required_reading": ["principles/engineering-behavior.md", "policies/data-handling.md", "policies/change-safety.md", "directory/README.md"]
+    },
+    {
+      "id": "app-interface-prod-deploy",
+      "path": "skills/app-interface-prod-deploy/SKILL.md",
+      "use_when": "Prepare a production deployment through app-interface by checking the requested commit's Quay images, updating all applicable CRCP/HCCP refs together on a clean branch, and opening one GitLab MR without merging it.",
+      "status": "draft",
+      "owner": null,
+      "last_verified": null,
+      "required_reading": ["principles/engineering-behavior.md", "policies/data-handling.md", "policies/change-safety.md", "directory/README.md"]
     }
   ]
 }

@@ -30,7 +30,15 @@ class ValidationTests(unittest.TestCase):
         errors, warnings = validate(self.root)
         self.assertEqual(errors, [])
         self.assertTrue(any("no services registered" in warning for warning in warnings))
-        self.assertEqual(sum("skill " in warning for warning in warnings), 1)
+        catalog = json.loads((self.root / "catalog.json").read_text())
+        expected_skill_warnings = {
+            f"skill {entry['id']}: draft; not operationally approved"
+            for entry in catalog["skills"] if entry["status"] == "draft"
+        }
+        self.assertEqual(
+            {warning for warning in warnings if warning.startswith("skill ")},
+            expected_skill_warnings,
+        )
         self.assertEqual(sum("source " in warning for warning in warnings), 5)
 
     def test_reviewed_skill_requires_owner_and_date(self):
