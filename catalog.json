@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "baseline": "principles/engineering-behavior.md",
+  "services": "directory/services.json",
+  "sources": "directory/sources.json",
+  "skills": [
+    {
+      "id": "release-pending-audit",
+      "path": "skills/release-pending-audit/SKILL.md",
+      "use_when": "Verify whether a Jira user's sprint tickets in chosen board column(s) such as Release Pending are actually released to production via Git ancestry and app-interface refs, and close only explicitly approved verified tickets.",
+      "status": "draft",
+      "owner": null,
+      "last_verified": null,
+      "required_reading": ["principles/engineering-behavior.md", "policies/data-handling.md", "policies/change-safety.md", "directory/README.md"]
+    },
+    {
+      "id": "app-interface-prod-deploy",
+      "path": "skills/app-interface-prod-deploy/SKILL.md",
+      "use_when": "Prepare a production deployment through app-interface by checking the requested commit's Quay images, updating all applicable CRCP/HCCP refs together on a clean branch, and opening one GitLab MR without merging it.",
+      "status": "draft",
+      "owner": null,
+      "last_verified": null,
+      "required_reading": ["principles/engineering-behavior.md", "policies/data-handling.md", "policies/change-safety.md", "directory/README.md"]
+    }
+  ]
+}

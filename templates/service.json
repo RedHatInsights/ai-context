@@ -1,0 +1,15 @@
+{
+  "id": "replace-me",
+  "aliases": [],
+  "owner": null,
+  "repository": null,
+  "environments": [],
+  "source_ids": {
+    "architecture": [],
+    "frontend-integration": [],
+    "observability": [],
+    "deployment": [],
+    "change-authorization": []
+  },
+  "related_services": []
+}

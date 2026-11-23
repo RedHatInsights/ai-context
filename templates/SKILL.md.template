@@ -1,0 +1,36 @@
+---
+name: replace-me
+description: Describe the engineering task and specific symptoms or requests that should select this skill.
+---
+
+# Replace with task title
+
+## Required reading
+
+For a skill placed at `skills/<name>/SKILL.md`, link `../../principles/engineering-behavior.md`,
+`../../policies/data-handling.md`, `../../policies/change-safety.md`, and
+`../../directory/README.md`. Check review status in `../../catalog.json`.
+
+## When to use
+
+State triggers, exclusions, and related workflows. Do not assert unverified platform facts.
+
+## Inputs and prerequisites
+
+List the target, evidence, access, and source topics needed. Identify which missing
+inputs block safe investigation and which block execution only.
+
+## Procedure
+
+Number concrete steps. Include where to retrieve facts, how to decide between
+branches, boundaries on actions, and how to verify the outcome. Do not invent
+operational commands or numeric success thresholds.
+
+## Stop and escalate
+
+Specify missing-evidence, authorization, unexpected-state, and ownership conditions.
+
+## Expected output
+
+Specify evidence, source references, actions actually taken, verification results,
+remaining uncertainty, and next owner action.

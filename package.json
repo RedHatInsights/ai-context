@@ -1,0 +1,11 @@
+{
+  "name": "ai-context",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Platform engineering playbooks and skills for console.redhat.com",
+  "license": "Apache-2.0",
+  "keywords": ["pi-package", "agent-skills"],
+  "pi": {
+    "skills": ["./skills"]
+  }
+}
