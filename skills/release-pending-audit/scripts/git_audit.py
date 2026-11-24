@@ -2,6 +2,7 @@
 """Fetch immutable Git snapshots and check release ancestry; never write to Jira."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import json
 import os
@@ -165,7 +166,7 @@ def inventory(workspace, timeout=180):
     return {"version": 1, "repositories": repositories, "errors": errors}
 
 
-def sync_one(path, remote, expected, branch, timeout):
+def sync_one(path, remote, expected, branch, timeout, required_commits=()):
     path = checkout(path, timeout)
     git(path, "check-ref-format", f"refs/remotes/{remote}/probe", timeout=timeout)
     url = git(path, "remote", "get-url", "--", remote, timeout=timeout).stdout.strip()
@@ -180,16 +181,25 @@ def sync_one(path, remote, expected, branch, timeout):
             raise AuditError("Remote default branch is unresolved; confirm host metadata")
         branch = branches[0]
     git(path, "check-ref-format", f"refs/heads/{branch}", timeout=timeout)
-    options = ["fetch", "--atomic", "--quiet", "--prune", "--no-tags",
+    options = ["fetch", "--atomic", "--quiet", "--no-tags",
                "--no-recurse-submodules", "--no-write-fetch-head"]
-    if shallow:
-        options.append("--unshallow")
-    git(path, *options, "--", remote, f"+refs/heads/*:refs/remotes/{remote}/*", timeout=timeout)
+    refspec = f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}"
+    git(path, *options, *(["--unshallow"] if shallow else []), "--", remote, refspec, timeout=timeout)
     complete_history(path, timeout)
     sha = git(path, "rev-parse", "--verify", "--end-of-options",
               f"refs/remotes/{remote}/{branch}^{{commit}}", timeout=timeout).stdout.strip()
-    return {"path": str(path), "remote": remote, "identity": actual,
-            "default_branch": branch, "default_sha": full_sha(sha), "fetched_at": now()}
+    snapshot = {"path": str(path), "remote": remote, "identity": actual,
+                "default_branch": branch, "default_sha": full_sha(sha), "fetched_at": now()}
+    # Production can point off the default branch. One bounded supplement, never
+    # fetch all branches. check still requires every individual object and proof.
+    missing = [oid for oid in sorted(required_commits) if
+               git(path, "cat-file", "-e", oid, check=False, timeout=timeout).returncode]
+    if missing:
+        try:
+            git(path, *options, "--", remote, *missing, timeout=timeout)
+        except AuditError as exc:
+            snapshot["supplement_error"] = safe_error(exc)
+    return snapshot
 
 
 def sync_repositories(document, timeout=180):
@@ -211,21 +221,40 @@ def sync_repositories(document, timeout=180):
             branch = spec.get("default_branch")
             if branch is not None:
                 text(branch, "default branch")
-            groups.setdefault((path, remote), []).append((name, expected, branch))
+            commits = spec.get("required_commits", [])
+            if not isinstance(commits, list):
+                raise AuditError("required_commits must be a list of full SHAs")
+            groups.setdefault((path, remote), []).append((name, expected, branch, {full_sha(c) for c in commits}))
         except AuditError as exc:
             results[name] = {"error": safe_error(exc)}
+    # Linked worktrees and different remotes of one checkout share a ref/object
+    # store. Serialize those requests; only independent repositories run in parallel.
+    stores = {}
     for (path, remote), aliases in groups.items():
         try:
-            identities = {entry[1] for entry in aliases}
-            branches = {entry[2] for entry in aliases if entry[2] is not None}
-            if len(identities) != 1 or len(branches) > 1:
-                raise AuditError("Conflicting identities/default branches for the same checkout and remote")
-            snapshot = sync_one(path, remote, next(iter(identities)),
-                                next(iter(branches), None), timeout)
+            common = git(path, "rev-parse", "--git-common-dir", timeout=timeout).stdout.strip()
+            stores.setdefault((path / common).resolve(), []).append((path, remote, aliases))
         except (AuditError, OSError) as exc:
-            snapshot = {"path": str(path), "remote": remote, "error": safe_error(exc)}
-        for name, _, _ in aliases:
-            results[name] = dict(snapshot)
+            results.update({a[0]: {"error": safe_error(exc)} for a in aliases})
+
+    def sync_store(requests):
+        entries = {}
+        for path, remote, aliases in requests:
+            try:
+                identities = {a[1] for a in aliases}
+                branches = {a[2] for a in aliases if a[2] is not None}
+                if len(identities) != 1 or len(branches) > 1:
+                    raise AuditError("Conflicting identities/default branches for the same checkout and remote")
+                snapshot = sync_one(path, remote, identities.pop(), next(iter(branches), None),
+                                    timeout, set().union(*(a[3] for a in aliases)))
+            except (AuditError, OSError) as exc:
+                snapshot = {"path": str(path), "remote": remote, "error": safe_error(exc)}
+            entries.update({a[0]: dict(snapshot) for a in aliases})
+        return entries
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for entries in pool.map(sync_store, stores.values()):
+            results.update(entries)
     return {"version": 1, "created_at": now(), "repositories": results}
 
 
@@ -233,6 +262,8 @@ class History:
     """Memoized offline reads shared across all PRs, targets, and tickets."""
 
     def __init__(self, snapshots, timeout=180):
+        self.maps = snapshots.get("target_maps", {})
+        self.release_config = None
         self.snapshots = snapshots.get("repositories")
         if not isinstance(self.snapshots, dict):
             raise AuditError("Snapshots must contain a repositories object")
@@ -299,7 +330,77 @@ class History:
         return self.revert_cache[key]
 
 
-def check_requirement(requirement, history, blockers, missing, evidence):
+def release_policy_target(requirement, history, snapshot, config_sha):
+    policy = requirement["release_policy"]
+    if "targets" in requirement or "exclude_templates" in requirement:
+        raise AuditError("Use a release policy or deployment targets, not both")
+    if history.release_config is None:
+        try:
+            history.release_config = load_json(Path(__file__).resolve().parents[1] / "config.json")
+        except (OSError, ValueError) as exc:
+            raise AuditError("Release policy configuration unavailable") from exc
+    identity = snapshot["identity"]
+    config = history.release_config
+    if policy == "merge_equals_release_repositories":
+        listed = config.get(policy)
+        if not isinstance(listed, list) or identity not in listed:
+            raise AuditError("Canonical repository not on the merge-equals-release list")
+    elif policy == "merge_equals_release_when_undeployed":
+        text(config.get(policy), "undeployed package policy")
+        text(requirement.get("deployment_absence_evidence"), "confirmed absence of app-interface deployment")
+        text(requirement.get("package_evidence"), "pinned npm package or Nx monorepo evidence")
+        if history.maps:
+            mapping = history.maps.get(identity)
+            require_clear_map(mapping)
+            if mapping.get("app_interface_sha") != config_sha or mapping.get("templates") != {}:
+                raise AuditError("Stale or nonempty deployment map conflicts with undeployed policy")
+    else:
+        raise AuditError("Unknown release policy")
+    return {"name": f"merge-equals-release: {identity}", "sha": snapshot["default_sha"],
+            "source": f"config.json#{policy}"}
+
+
+def require_clear_map(record):
+    if not isinstance(record, dict) or not isinstance(record.get("blockers"), list):
+        raise AuditError("Invalid or incomplete prepared target map")
+    if record["blockers"]:
+        raise AuditError("; ".join(str(b) for b in record["blockers"]))
+
+
+def reviewed_targets(requirement, history, config_sha):
+    """Use the pinned map, including ALL templates unless explicitly accounted for."""
+    snapshot = history.snapshots[requirement["repository"]]
+    if not isinstance(history.maps, dict):
+        raise AuditError("Invalid prepared target maps")
+    if "release_policy" in requirement:
+        return [release_policy_target(requirement, history, snapshot, config_sha)]
+    if "targets" in requirement:
+        if history.maps:
+            text(requirement.get("mapping_evidence"), "evidence for manual mapping")
+        return requirement["targets"]
+    mapping = history.maps.get(snapshot["identity"])
+    if not isinstance(mapping, dict) or mapping.get("app_interface_sha") != config_sha:
+        raise AuditError("Production map missing or from a different app-interface snapshot")
+    require_clear_map(mapping)
+    templates = mapping.get("templates")
+    if not isinstance(templates, dict):
+        raise AuditError("Incomplete prepared template list")
+    exclusions = requirement.get("exclude_templates", {})
+    if not isinstance(exclusions, dict) or exclusions.keys() - templates.keys():
+        raise AuditError("Unknown or invalid template exclusion; review the current candidates")
+    targets = []
+    for selector, template in templates.items():
+        if selector in exclusions:
+            text(exclusions[selector], f"reason for excluding {selector}")
+            continue
+        require_clear_map(template)
+        if not isinstance(template.get("targets"), list):
+            raise AuditError(f"Incomplete target list: {selector}")
+        targets.extend(template["targets"])
+    return targets
+
+
+def check_requirement(requirement, history, config_sha, blockers, missing, evidence):
     if not isinstance(requirement, dict):
         blockers.append("Invalid PR/MR requirement")
         return
@@ -315,16 +416,15 @@ def check_requirement(requirement, history, blockers, missing, evidence):
     if requirement.get("targets_complete") is not True:
         blockers.append("Production target mapping is incomplete")
     landed = requirement.get("landed_commits")
-    targets = requirement.get("targets")
     if not isinstance(landed, list) or not landed:
         blockers.append("Integrated commit(s) are unresolved")
-        return
-    if not isinstance(targets, list) or not targets:
-        blockers.append("No production refs mapped")
         return
     repository = requirement.get("repository")
     try:
         _, default_sha = history.repository(repository)
+        targets = reviewed_targets(requirement, history, config_sha)
+        if not isinstance(targets, list) or not targets:
+            raise AuditError("No production refs mapped")
         landed = list(dict.fromkeys(full_sha(sha) for sha in landed))
         for sha in landed:
             if not history.ancestor(repository, sha, default_sha):
@@ -393,10 +493,14 @@ def check_tickets(document, snapshots, timeout=180):
             blockers.append("No required PRs/MRs identified")
         else:
             for requirement in requirements:
-                check_requirement(requirement, history, blockers, missing, evidence)
+                check_requirement(requirement, history, document.get("app_interface_sha"), blockers, missing, evidence)
         status = "Needs clarification" if blockers else "Not released" if missing else "Released"
+        reasons = blockers + missing
+        if status == "Released":
+            reasons = [f"merge-equals-release: {history.snapshots[r['repository']]['identity']}"
+                       for r in requirements if "release_policy" in r]
         results.append({"key": key, "url": ticket.get("url"), "status": status,
-                        "reasons": list(dict.fromkeys(blockers + missing)), "checks": evidence})
+                        "reasons": list(dict.fromkeys(reasons)), "checks": evidence})
     return {"version": 1, "checked_at": now(), "basis": "app-interface configured production refs; not live rollout",
             "app_interface_sha": document.get("app_interface_sha"), "tickets": results}
 

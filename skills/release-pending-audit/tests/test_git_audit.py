@@ -10,6 +10,7 @@ from pathlib import Path
 import stat
 import subprocess
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -136,7 +137,25 @@ class GitAuditTests(unittest.TestCase):
         run_git(self.source, "switch", "-q", "trunk")
         self.push()
         self.refresh()
+        # Without an explicit need, neither the divergent branch nor its object is fetched.
+        self.assert_status("Needs clarification", self.manifest(production=other))
+        self.request["repositories"][0]["required_commits"] = [other, other]
+        with mock.patch.object(audit, "git", wraps=audit.git) as commands:
+            self.refresh()
+        fetches = [c.args for c in commands.call_args_list if c.args[1] == "fetch"]
+        self.assertEqual(len(fetches), 2)
+        self.assertEqual(fetches[0][-1], "+refs/heads/trunk:refs/remotes/origin/trunk")
+        self.assertEqual(fetches[1].count(other), 1)
+        self.assertNotIn("origin/divergent", run_git(self.local, "branch", "-r"))
         self.assert_status("Not released", self.manifest(production=other))
+
+    def test_failed_supplement_blocks_only_work_that_needs_the_object(self):
+        missing = "f" * 40
+        self.request["repositories"][0]["required_commits"] = [missing]
+        self.refresh()
+        self.assertIn("supplement_error", self.snapshot)
+        self.assert_status("Needs clarification", self.manifest(production=missing))
+        self.assert_status("Released")
 
     def test_every_production_target_must_pass(self):
         document = self.manifest()
@@ -260,6 +279,24 @@ class GitAuditTests(unittest.TestCase):
         self.assertEqual(result["repositories"]["service"], result["repositories"]["same-service"])
         self.assertEqual(sum(call.args[1] == "fetch" for call in commands.call_args_list), 1)
 
+    def test_only_independent_git_stores_sync_concurrently(self):
+        linked = self.root / "linked"
+        run_git(self.local, "worktree", "add", "-q", "--detach", str(linked), "HEAD")
+        service = self.request["repositories"][0]
+        request = {"repositories": [service, dict(service, id="linked", path=str(linked)),
+                                    dict(service, id="independent", path=str(self.source))]}
+        workers = threading.Barrier(2, timeout=10)
+
+        def sync(path, *args):
+            if path != linked:
+                workers.wait()
+            return {"thread": threading.get_ident()}
+
+        with mock.patch.object(audit, "sync_one", side_effect=sync):
+            rows = audit.sync_repositories(request)["repositories"]
+        self.assertEqual(rows["service"]["thread"], rows["linked"]["thread"])
+        self.assertNotEqual(rows["service"]["thread"], rows["independent"]["thread"])
+
     def test_conflicting_aliases_do_not_fetch(self):
         request = copy.deepcopy(self.request)
         alias = dict(request["repositories"][0], id="conflicting", default_branch="main")
@@ -332,6 +369,7 @@ class GitAuditTests(unittest.TestCase):
         other = self.commit("other.txt", "other\n", "other branch")
         run_git(self.source, "switch", "-q", "trunk")
         self.push()
+        self.request["repositories"][0]["required_commits"] = [other]
         self.refresh()
         tree = run_git(self.local, "rev-parse", f"{other}^{{tree}}")
         fake = run_git(self.local, "commit-tree", tree, "-p", self.landed, "-m", "fake parent")

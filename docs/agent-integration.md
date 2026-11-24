@@ -29,7 +29,7 @@ pi --skill "$AI_CONTEXT/skills" \
 Inspect startup diagnostics and explicitly invoke a skill to test loading:
 
 ```text
-/skill:release-pending-audit Run the release audit; ask me for the scope first.
+/skill:release-pending-audit Audit Release Pending for <assignee> on <board> in its active sprint.
 ```
 
 Use `/reload` after editing skills. Flags and commands above follow the local Pi
@@ -60,7 +60,7 @@ Package installation advertises skills but does **not** automatically load the
 package root's `AGENTS.md` or baseline behavior in other repositories. Each skill
 loads its required reading on activation. If baseline behavior must apply before
 skill selection, retain the startup flag or configure consumer instructions below.
-No extensions, operational scripts, dependencies, or installation hooks are bundled.
+Package discovery does not execute skill helpers or install their optional dependencies.
 
 ## Other harnesses and consumer bootstrap
 

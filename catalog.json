@@ -7,7 +7,7 @@
     {
       "id": "release-pending-audit",
       "path": "skills/release-pending-audit/SKILL.md",
-      "use_when": "Verify whether a Jira user's sprint tickets in chosen board column(s) such as Release Pending are actually released to production via Git ancestry and app-interface refs, and close only explicitly approved verified tickets.",
+      "use_when": "Audit a Jira assignee's selected board columns within the requested sprint scope (or explicitly the entire column) against configured production refs, and close only explicitly approved verified tickets.",
       "status": "draft",
       "owner": null,
       "last_verified": null,
